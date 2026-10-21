@@ -4,8 +4,9 @@ import os
 from cachetools import cached, TTLCache
 
 load_dotenv()
+
 CLIENT_ID = os.environ.get('TWITCH_CLIENT_ID')
-CLIENT_SECRET = os.environ.get('TWITCH_CLIENT_ID')
+CLIENT_SECRET = os.environ.get('TWITCH_CLIENT_SECRET')
 
 @cached(cache=TTLCache(maxsize=1, ttl=3600))
 def get_access_token():
