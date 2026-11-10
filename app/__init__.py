@@ -4,6 +4,7 @@ from flask import Flask
 from .routes import main as main_bp
 from .auth import auth_bp
 from .models import db
+from .services.populate_db import initialise_database
 
 
 load_dotenv()
@@ -19,5 +20,7 @@ def create_app():
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
+
+    initialise_database()
 
     return app
