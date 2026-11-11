@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, abort
 from ..helpers.utils import generate_db_conn
+from ..services.igdb import igdb_post
 
 games_bp = Blueprint('games', __name__, url_prefix='/games')
 
@@ -68,3 +69,19 @@ def search():
         abort(404, description=f'Game of title {game_name} not found!')
 
     return jsonify(games), 200
+
+
+@games_bp.post('/catalogue')
+def add_game():
+    """
+    """
+    title = request.args.get(key='name', default='')
+    release_year = request.args.get(key='year', default='')
+    query = f"""
+    fields id, name, summary, first_release_date, genres.name, cover.url; 
+    where first_release_date >= {start_date} & first_release_date < {end_date}; 
+    sort first_release_date asc; 
+    limit 10;
+    """
+    try:
+        igdb_post('games')
