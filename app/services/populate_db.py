@@ -9,6 +9,15 @@ from .igdb import igdb_post
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+insert_query = """INSERT INTO games (game_id, title, description, release_year, genre, cover_image_url)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (game_id) DO UPDATE SET 
+               title = EXCLUDED.title,
+                   description = EXCLUDED.description,
+                   release_year = EXCLUDED.release_year,
+                   genre = EXCLUDED.genre,
+                   cover_image_url = EXCLUDED.cover_image_url"""
+
 def get_games_by_date(limit=500):
     """
     Get a list a maximum of 500 games between 2 dates and return it.
@@ -54,28 +63,18 @@ def convert_game_to_row(game):
 
     return (game_id, title, description, release_year, genre_names, cover_image_url)
 
-import psycopg
 
-
-def push_to_db(game_row):
+def push_to_db(game_row, amount='single'):
     """
     Uses Psycopg to push the tuple of a game into the database, does nothing if there's a conflict.
     """
     conn = psycopg.connect(os.environ.get('DATABASE_URL'))
     try:
         cur = conn.cursor()
-        cur.executemany(
-            """INSERT INTO games (game_id, title, description, release_year, genre, cover_image_url)
-               VALUES (%s, %s, %s, %s, %s, %s)
-               ON CONFLICT (game_id) DO UPDATE SET 
-               title = EXCLUDED.title,
-                   description = EXCLUDED.description,
-                   release_year = EXCLUDED.release_year,
-                   genre = EXCLUDED.genre,
-                   cover_image_url = EXCLUDED.cover_image_url
-            """,
-            game_row,
-        )
+        if (amount == 'many'):
+            cur.executemany(insert_query, game_row)
+        elif (amount == 'single'):
+            cur.execute(insert_query, game_row)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -89,6 +88,6 @@ def initialise_database():
     """
     games = get_games_by_date()
     rows = [convert_game_to_row(game) for game in games]
-    push_to_db(rows)
+    push_to_db(rows, 'many')
     print(f'Pushed {len(rows)} rows into database.')
     return
