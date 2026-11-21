@@ -60,7 +60,7 @@ def search():
     """
     GET route that queries database via game name and genre from query parameters in URL, and returns a result.
     """
-    game_name = request.get_json(silent=True)
+    game_name = request.args.get('name', default='')
 
     if not game_name:
         return jsonify({"error": "JSON body containing title and year is required for POST request"}), 400
