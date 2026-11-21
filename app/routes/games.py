@@ -141,3 +141,17 @@ def change_game_details(game_id):
         abort(500, description=f'Database error while updating game: {e}')
     finally:
         conn.close()
+
+@games_bp.delete('/catalogue/<int:game_id>')
+def delete_game(game_id):
+    conn = generate_db_conn()
+    try:
+        conn.execute(f"DELETE FROM games WHERE game_id = {game_id}")
+        conn.commit()
+        return "", 204
+    
+    except Exception as e:
+        conn.rollback()
+        abort(500, description=f'Database error while deleting game: {e}')
+    finally:
+        conn.close()
