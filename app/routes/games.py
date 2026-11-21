@@ -60,7 +60,11 @@ def search():
     """
     GET route that queries database via game name and genre from query parameters in URL, and returns a result.
     """
-    game_name = request.args.get(key='name', default='')
+    game_name = request.get_json(silent=True)
+
+    if not game_name:
+        return jsonify({"error": "JSON body containing title and year is required for POST request"}), 400
+    
     conn = generate_db_conn()
     try:
         games = conn.execute(f"SELECT * FROM games where title ILIKE '%{game_name}%'").fetchall()
@@ -80,11 +84,13 @@ def add_game():
     POST route which requires JSON body containing the title (and optionally the release year) of a game to be queried in the IGDB API before being added to the database.
     """
     data = request.get_json(silent=True)
-    title = data.get('title', '')
-    release_year = data.get('year')
 
     if not data:
         return jsonify({"error": "JSON body containing title and year is required for POST request"}), 400
+    
+    title = data.get('title', '')
+    release_year = data.get('year')
+
     if not title:
         return jsonify({"error": "Title is required in JSON body"}), 400
 
