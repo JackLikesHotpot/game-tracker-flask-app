@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify, abort, url_for
 from ..helpers.utils import generate_db_conn
 from ..services.igdb import igdb_post
 from..services.populate_db import convert_game_to_row, push_to_db
@@ -13,17 +13,32 @@ def get_all_games():
     """
     conn = generate_db_conn()
     try:
-        rows = conn.execute('SELECT * FROM games ORDER BY title').fetchall()
+        games = conn.execute('SELECT * FROM games ORDER BY title').fetchall()
     finally:
         conn.close()
 
-    if not rows:
+    if not games:
         abort(404, description='Game database not found!')
-    
-    return jsonify(rows), 200
+
+    response_body = []
+    for game in games:
+        response_body.append({
+            "game_id": game["game_id"],
+            "title": game["title"],
+            "description": game["description"],
+            "release_year": game["release_year"],
+            "cover_image_url": game["cover_image_url"],
+            "self": {
+                "href": url_for("games.get_game_by_id", game_id=game["game_id"]),
+                "method": "GET",
+        }})
+
+    return jsonify({
+        "games": response_body,
+        "search": {"href": url_for("games.search")}}), 200
 
 
-@games_bp.get('/catalogue/<game_id>')
+@games_bp.get('/catalogue/<int:game_id>')
 def get_game_by_id(game_id):
     """
     Queries database for one game of a given ID and returns it.
@@ -36,8 +51,17 @@ def get_game_by_id(game_id):
 
     if not game:
         abort(404, description=f'Game of ID {game_id} not found!')
-
-    return jsonify(game), 200
+    
+    return jsonify({"game": {
+        "game_id": game["game_id"],
+        "title": game["title"],
+        "description": game["description"],
+        "release_year": game["release_year"],
+        "cover_image_url": game["cover_image_url"],
+        "self": {
+            "href": url_for("games.get_game_by_id", game_id=game["game_id"]),
+            "method": "GET"}}, 
+        "search": {"href": url_for("games.search")}}), 200
 
 @games_bp.get('/catalogue/<genre>')
 def get_games_by_genre(genre):
@@ -46,14 +70,28 @@ def get_games_by_genre(genre):
     """
     conn = generate_db_conn()
     try:
-        games = conn.execute(f'SELECT * FROM games where genre ILIKE %{genre}%').fetchall()
+        games = conn.execute(f"SELECT * FROM games where genre ILIKE '%{genre}%'").fetchall()
     finally:
         conn.close()
 
     if not games:
         abort(404, description='Game database not found!')
 
-    return jsonify(games), 200
+    response_body = []
+    for game in games:
+        link = {
+            "game_id": game['game_id'],
+            "title": game['title'],
+            "description": game['description'],
+            "release_year": game['release_year'],
+            "cover_image_url": game['cover_image_url'],
+            "self": {
+                "href": url_for('games.get_game_by_id', game_id=game['game_id']),
+                "method": 'GET'
+                }}
+        response_body.append(link)
+    return jsonify({"games": response_body,
+                    "search": {"href": url_for('games.search')},}), 200
 
 @games_bp.get('/catalogue/search')
 def search():
@@ -61,7 +99,6 @@ def search():
     GET route that queries database via game name and genre from query parameters in URL, and returns a result.
     """
     game_name = request.args.get('name', default='')
-
     if not game_name:
         return jsonify({"error": "JSON body containing title and year is required for POST request"}), 400
     
@@ -74,7 +111,22 @@ def search():
     if not games:
         abort(404, description=f'Game of title {game_name} not found!')
 
-    return jsonify(games), 200
+    response_body = []
+    for game in games:
+        link = {
+            "game_id": game['game_id'],
+            "title": game['title'],
+            "description": game['description'],
+            "release_year": game['release_year'],
+            "cover_image_url": game['cover_image_url'],
+            "self": {
+                "href": url_for('games.get_game_by_id', game_id=game['game_id']),
+                "method": 'GET'
+                },
+        }
+        response_body.append(link)
+    return jsonify({"games": response_body,   
+                    "search": {"href": url_for('games.search')}}), 200
 
 
 @games_bp.post('/catalogue')
@@ -99,20 +151,33 @@ def add_game():
         start, end = arrow.get(release_year, 1, 1).span('year')
         where = f"where first_release_date >= {start.int_timestamp} & first_release_date < {end.int_timestamp}"
     query = f"""
-    search "{title}";
-    fields id, name, summary, first_release_date, genres.name, cover.url; 
-    {where};
-    limit 10;
-    """
+        search "{title}";
+        fields id, name, summary, first_release_date, genres.name, cover.url; 
+        {where};
+        limit 10;
+        """
     try:
         games = igdb_post('games', query=query)
         if not games:
             abort(404, description=f"No game called '{title}' found on IGDB")        
         game_tuple = convert_game_to_row(games[0])
-        push_to_db(game_tuple, 'single')
-        return jsonify({"message": "Added game successfully!"}), 201
-    except Exception as e:
-        raise
+        game = push_to_db(game_tuple, 'single')
+        return jsonify({
+            "message": "Added game successfully!",
+            "game": {
+                "game_id": game['game_id'],
+                "title": game['title'],
+                "release_year": game['release_year'],
+                "self":
+                    {"href": url_for("games.get_game_by_id", game_id=game['game_id']),
+                     "method": "GET"}},
+            "catalogue":
+                    {"href": url_for("games.get_all_games"),
+                    "method": "GET"}
+            }), 201
+    
+    except Exception as error:
+        abort(500, description=f"Error trying to add new game to database: {error}")
 
 @games_bp.put('/catalogue/<int:game_id>')
 def change_game_details(game_id):
@@ -144,7 +209,17 @@ def change_game_details(game_id):
         """)
 
         conn.commit()
-        return jsonify(game)
+        return jsonify({
+            "game": game,
+            "self": {
+                "href": url_for("games.get_game_by_id", game_id=game['game_id']),
+                "method": "GET",
+            },
+            "catalogue": {
+                "href": url_for("games.get_all_games"),
+                "method": "GET",
+            }}), 200
+    
     except Exception as e:
         conn.rollback()
         abort(500, description=f'Database error while updating game: {e}')
@@ -160,7 +235,12 @@ def delete_game(game_id):
     try:
         conn.execute(f"DELETE FROM games WHERE game_id = {game_id}")
         conn.commit()
-        return "", 204
+        return jsonify({
+            "message": f"Game with ID {game_id} deleted successfully!",
+            "catalogue": {
+                "href": url_for("games.get_all_games"),
+                "method": "GET",
+            }}), 200
     
     except Exception as e:
         conn.rollback()
