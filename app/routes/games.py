@@ -58,7 +58,7 @@ def get_games_by_genre(genre):
 @games_bp.get('/catalogue/search')
 def search():
     """
-    Queries database via game name and genre from query parameters in URL, and returns a result.
+    GET route that queries database via game name and genre from query parameters in URL, and returns a result.
     """
     game_name = request.args.get(key='name', default='')
     conn = generate_db_conn()
@@ -77,7 +77,7 @@ def search():
 def add_game():
     # check credentials before adding
     """
-    POST request which requires JSON body containing the title (and optionally the release year) of a game to be queried in the IGDB API before being added to the database.
+    POST route which requires JSON body containing the title (and optionally the release year) of a game to be queried in the IGDB API before being added to the database.
     """
     data = request.get_json(silent=True)
     title = data.get('title', '')
@@ -110,6 +110,9 @@ def add_game():
 
 @games_bp.put('/catalogue/<int:game_id>')
 def change_game_details(game_id):
+    """
+    PUT route that checks for a game in the database by its game_id, modifies it with a provided JSON body, and overwrites it in the database.
+    """
     data = request.get_json(silent=True)
     if not data:
         abort(404, description='Details must be passed into body! (title, description, release_year, genre, cover_image_url)')
@@ -144,6 +147,9 @@ def change_game_details(game_id):
 
 @games_bp.delete('/catalogue/<int:game_id>')
 def delete_game(game_id):
+    """
+    DELETE request that deletes a game with a specific game id from the database, returns a 204 if successful.
+    """
     conn = generate_db_conn()
     try:
         conn.execute(f"DELETE FROM games WHERE game_id = {game_id}")
