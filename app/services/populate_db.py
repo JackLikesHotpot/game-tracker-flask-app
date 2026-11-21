@@ -5,6 +5,7 @@ import requests
 import logging
 from dotenv import load_dotenv
 from .igdb import igdb_post
+from psycopg.rows import dict_row
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -16,7 +17,8 @@ insert_query = """INSERT INTO games (game_id, title, description, release_year, 
                    description = EXCLUDED.description,
                    release_year = EXCLUDED.release_year,
                    genre = EXCLUDED.genre,
-                   cover_image_url = EXCLUDED.cover_image_url"""
+                   cover_image_url = EXCLUDED.cover_image_url
+                RETURNING *"""
 
 def get_games_by_date(limit=500):
     """
@@ -68,14 +70,17 @@ def push_to_db(game_row, amount='single'):
     """
     Uses Psycopg to push the tuple of a game into the database, does nothing if there's a conflict.
     """
-    conn = psycopg.connect(os.environ.get('DATABASE_URL'))
+    conn = psycopg.connect(os.environ.get('DATABASE_URL'), row_factory=dict_row)
     try:
         cur = conn.cursor()
+        result = None
         if (amount == 'many'):
             cur.executemany(insert_query, game_row)
         elif (amount == 'single'):
             cur.execute(insert_query, game_row)
+            result = cur.fetchone()
         conn.commit()
+        return result
     except Exception:
         conn.rollback()
         raise
