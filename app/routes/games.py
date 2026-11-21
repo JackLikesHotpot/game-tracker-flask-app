@@ -107,3 +107,37 @@ def add_game():
         return jsonify({"message": "Added game successfully!"}), 201
     except Exception as e:
         raise
+
+@games_bp.put('/catalogue/<int:game_id>')
+def change_game_details(game_id):
+    data = request.get_json(silent=True)
+    if not data:
+        abort(404, description='Details must be passed into body! (title, description, release_year, genre, cover_image_url)')
+
+    conn = generate_db_conn()
+    try:
+        game = conn.execute(f"SELECT * FROM games where game_id = {game_id}").fetchone()
+        if not game:
+            return jsonify({"message": f"Game with ID {game_id} not found!"}), 404
+
+        for field in ['title', 'description', 'release_year', 'genre', 'cover_image_url']:
+            if data.get(field) != None:
+                game[field] = data[field]
+
+        conn.execute(f"""
+        UPDATE games set 
+        title = '{game['title']}',
+        description = '{game['description']}',
+        release_year = '{game['release_year']}',
+        genre = '{game['genre']}',
+        cover_image_url = '{game['cover_image_url']}'
+        WHERE game_id = {game_id}
+        """)
+
+        conn.commit()
+        return jsonify(game)
+    except Exception as e:
+        conn.rollback()
+        abort(500, description=f'Database error while updating game: {e}')
+    finally:
+        conn.close()
